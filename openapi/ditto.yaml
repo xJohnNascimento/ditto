@@ -1,0 +1,1000 @@
+openapi: 3.0.3
+info:
+  title: Ditto
+  version: 0.4.0
+  description: |
+    A synthetic FX provider and payout rail. Amounts and rates are canonical base-10 integer
+    strings: amounts in minor units, rates scaled by 10^8. A reference identifies one request
+    and at most one external effect; replaying it with the same body returns the known result,
+    and another body answers 409. A path or method the document does not declare answers 404
+    `not_found` or 405 `method_not_allowed` with the same error shape, and a body over 1 MiB answers
+    413.
+
+    Payout transitions are delivered to the configured endpoint as `payout.status_changed`
+    events (schema `PayoutStatusChangedEvent`), signed with Standard Webhooks headers
+    (`webhook-id`, `webhook-timestamp`, `webhook-signature`) and retried at least once.
+  license:
+    name: MIT
+servers:
+  - url: http://localhost:9002
+security:
+  - providerKey: []
+tags:
+  - name: health
+    description: Liveness
+  - name: quotes
+    description: Firm quotes
+  - name: trades
+    description: Trades and their fences
+  - name: payouts
+    description: Payouts and their fences
+  - name: statements
+    description: Frozen statements
+  - name: admin
+    description: Faults, funding and rates; separate key, non-production only
+
+paths:
+  /healthz:
+    get:
+      operationId: getHealth
+      summary: Report liveness
+      tags: [health]
+      security: []
+      responses:
+        "200":
+          description: Alive
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+
+  /v1/quotes:
+    post:
+      operationId: createQuote
+      summary: Create a firm quote for a fixed sell amount
+      tags: [quotes]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateQuoteRequest"
+      responses:
+        "201":
+          description: Quote created, firm for 60 seconds
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quote"
+        "200":
+          description: Replay of an existing client reference
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quote"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /v1/trades:
+    post:
+      operationId: createTrade
+      summary: Execute a trade on a quote
+      tags: [trades]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTradeRequest"
+      responses:
+        "201":
+          description: Terminal outcome of the reference (FILLED, REJECTED or CLOSED)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Trade"
+        "200":
+          description: Replay of an existing reference
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Trade"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /v1/trades/by-reference/{reference}:
+    get:
+      operationId: getTradeByReference
+      summary: Read a trade by reference
+      description: A 404 means the reference is not visible now, never that it cannot exist later.
+      tags: [trades]
+      parameters:
+        - $ref: "#/components/parameters/Reference"
+      responses:
+        "200":
+          description: The trade
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Trade"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /v1/trades/by-reference/{reference}/close:
+    post:
+      operationId: closeTrade
+      summary: Return the trade's terminal outcome, or close an unexecuted reference for good
+      tags: [trades]
+      parameters:
+        - $ref: "#/components/parameters/Reference"
+      responses:
+        "200":
+          description: The reference's terminal status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FenceResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /v1/payouts:
+    post:
+      operationId: createPayout
+      summary: Accept a payout and debit the provider balance once
+      tags: [payouts]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePayoutRequest"
+      responses:
+        "201":
+          description: ACCEPTED, or REJECTED with an ISO 20022 code; a closed reference answers CANCELLED
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payout"
+        "200":
+          description: Replay of an existing reference
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payout"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /v1/payouts/by-reference/{reference}:
+    get:
+      operationId: getPayoutByReference
+      summary: Read a payout by reference
+      description: A 404 means the reference is not visible now, never that it cannot exist later.
+      tags: [payouts]
+      parameters:
+        - $ref: "#/components/parameters/Reference"
+      responses:
+        "200":
+          description: The payout
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payout"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /v1/payouts/by-reference/{reference}/cancel:
+    post:
+      operationId: cancelPayout
+      summary: Cancel an unexecuted payout, or fence an unknown reference for good
+      tags: [payouts]
+      parameters:
+        - $ref: "#/components/parameters/Reference"
+      responses:
+        "200":
+          description: The reference's status after the request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FenceResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /v1/statements:
+    post:
+      operationId: createStatement
+      summary: Capture a frozen statement
+      tags: [statements]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateStatementRequest"
+      responses:
+        "201":
+          description: The statement's manifest
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Statement"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /v1/statements/{statementId}/pages:
+    get:
+      operationId: getStatementPage
+      summary: Read one page of a frozen statement
+      tags: [statements]
+      parameters:
+        - $ref: "#/components/parameters/StatementId"
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: A page of lines
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatementPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /v1/statements/{statementId}/lines/{lineId}:
+    get:
+      operationId: getStatementLine
+      summary: Read one immutable statement line
+      tags: [statements]
+      parameters:
+        - $ref: "#/components/parameters/StatementId"
+        - name: lineId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The line
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatementLine"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /admin/scenarios:
+    post:
+      operationId: armScenario
+      summary: Arm a fault on a target
+      tags: [admin]
+      security:
+        - adminKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArmScenarioRequest"
+      responses:
+        "201":
+          description: The armed fault
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScenarioArm"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+    get:
+      operationId: listScenarios
+      summary: List armed faults with their consumption evidence
+      tags: [admin]
+      security:
+        - adminKey: []
+      responses:
+        "200":
+          description: The arms
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScenarioArmList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /admin/funding:
+    post:
+      operationId: createFunding
+      summary: Move funds in or out of a provider balance, idempotent by reference
+      tags: [admin]
+      security:
+        - adminKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FundingRequest"
+      responses:
+        "201":
+          description: The movement
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Movement"
+        "200":
+          description: Replay of an existing reference
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Movement"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+
+  /admin/rates:
+    post:
+      operationId: setRate
+      summary: Set the rate of a currency pair
+      tags: [admin]
+      security:
+        - adminKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Rate"
+      responses:
+        "200":
+          description: The rate now in force
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Rate"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+
+  /admin/requests:
+    get:
+      operationId: getRequestStats
+      summary: Request observations and per-second counts
+      tags: [admin]
+      security:
+        - adminKey: []
+      parameters:
+        - name: since
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: Counts per route and the peak per second
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RequestStats"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /admin/reset:
+    post:
+      operationId: resetDataset
+      summary: Clear the dataset; refused unless the dataset id matches and the profile is local or CI
+      tags: [admin]
+      security:
+        - adminKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResetRequest"
+      responses:
+        "204":
+          description: Cleared
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+
+components:
+  securitySchemes:
+    providerKey:
+      type: http
+      scheme: bearer
+      description: One key per provider account
+    adminKey:
+      type: http
+      scheme: bearer
+      description: The admin key, never the same as a provider key
+
+  parameters:
+    Reference:
+      name: reference
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+    StatementId:
+      name: statementId
+      in: path
+      required: true
+      schema:
+        type: string
+
+  headers:
+    RetryAfter:
+      description: Seconds to wait before retrying
+      schema:
+        type: integer
+        minimum: 1
+
+  responses:
+    BadRequest:
+      description: The request does not match the contract
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Missing or unknown key
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: The key is valid but the profile or dataset does not allow this operation
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    PayloadTooLarge:
+      description: The body is larger than 1 MiB
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Not visible now
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Conflict:
+      description: The reference already holds a different request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    TooManyRequests:
+      description: Over the provider account's request budget; nothing was executed
+      headers:
+        Retry-After:
+          $ref: "#/components/headers/RetryAfter"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Amount:
+      type: string
+      description: Non-negative integer in minor units
+      pattern: "^(0|[1-9][0-9]*)$"
+    SignedAmount:
+      type: string
+      description: Signed integer in minor units
+      pattern: "^(0|-?[1-9][0-9]*)$"
+    Currency:
+      type: string
+      pattern: "^[A-Z]{3}$"
+    RateE8:
+      type: string
+      description: Positive integer, bought units per sold unit scaled by 10^8
+      pattern: "^[1-9][0-9]*$"
+    ClientReference:
+      type: string
+      minLength: 1
+      maxLength: 128
+
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum:
+            - validation_failed
+            - unauthorized
+            - forbidden
+            - not_found
+            - method_not_allowed
+            - reference_conflict
+            - payload_too_large
+            - rate_limited
+            - internal
+        message:
+          type: string
+
+    CreateQuoteRequest:
+      type: object
+      required: [client_reference, sell_currency, buy_currency, sell_amount]
+      properties:
+        client_reference:
+          $ref: "#/components/schemas/ClientReference"
+        sell_currency:
+          $ref: "#/components/schemas/Currency"
+        buy_currency:
+          $ref: "#/components/schemas/Currency"
+        sell_amount:
+          $ref: "#/components/schemas/Amount"
+    Quote:
+      type: object
+      required: [quote_id, client_reference, sell_currency, buy_currency, sell_amount, rate_e8, buy_amount, expires_at]
+      properties:
+        quote_id:
+          type: string
+        client_reference:
+          $ref: "#/components/schemas/ClientReference"
+        sell_currency:
+          $ref: "#/components/schemas/Currency"
+        buy_currency:
+          $ref: "#/components/schemas/Currency"
+        sell_amount:
+          $ref: "#/components/schemas/Amount"
+        rate_e8:
+          $ref: "#/components/schemas/RateE8"
+        buy_amount:
+          $ref: "#/components/schemas/Amount"
+        expires_at:
+          type: string
+          format: date-time
+
+    CreateTradeRequest:
+      type: object
+      required: [reference, quote_id, sell_currency, buy_currency, sell_amount]
+      properties:
+        reference:
+          $ref: "#/components/schemas/ClientReference"
+        quote_id:
+          type: string
+        sell_currency:
+          $ref: "#/components/schemas/Currency"
+        buy_currency:
+          $ref: "#/components/schemas/Currency"
+        sell_amount:
+          $ref: "#/components/schemas/Amount"
+    Trade:
+      type: object
+      description: The request fields are absent only for a reference closed before any create.
+      required: [reference, status]
+      properties:
+        trade_id:
+          type: string
+        reference:
+          $ref: "#/components/schemas/ClientReference"
+        status:
+          type: string
+          enum: [FILLED, REJECTED, CLOSED]
+        reason:
+          type: string
+          enum: [LAST_LOOK, QUOTE_EXPIRED, INSUFFICIENT_BALANCE]
+        sell_currency:
+          $ref: "#/components/schemas/Currency"
+        buy_currency:
+          $ref: "#/components/schemas/Currency"
+        sell_amount:
+          $ref: "#/components/schemas/Amount"
+        buy_amount:
+          $ref: "#/components/schemas/Amount"
+        rate_e8:
+          $ref: "#/components/schemas/RateE8"
+        executed_at:
+          type: string
+          format: date-time
+
+    FenceResult:
+      type: object
+      required: [reference, status]
+      properties:
+        reference:
+          $ref: "#/components/schemas/ClientReference"
+        status:
+          type: string
+          enum: [FILLED, REJECTED, CLOSED, ACCEPTED, PROCESSING, COMPLETED, FAILED, CANCELLED]
+
+    Beneficiary:
+      type: object
+      required: [id, name, account, bank_code, country]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+          maxLength: 140
+        account:
+          type: string
+          maxLength: 34
+        bank_code:
+          type: string
+          maxLength: 11
+        country:
+          type: string
+          pattern: "^[A-Z]{2}$"
+    CreatePayoutRequest:
+      type: object
+      required: [reference, currency, amount, beneficiary]
+      properties:
+        reference:
+          $ref: "#/components/schemas/ClientReference"
+        currency:
+          $ref: "#/components/schemas/Currency"
+        amount:
+          $ref: "#/components/schemas/Amount"
+        beneficiary:
+          $ref: "#/components/schemas/Beneficiary"
+        remittance_info:
+          type: string
+          maxLength: 140
+    Payout:
+      type: object
+      description: Currency and amount are absent only for a reference cancelled before any create.
+      required: [reference, status, sequence]
+      properties:
+        payout_id:
+          type: string
+        reference:
+          $ref: "#/components/schemas/ClientReference"
+        status:
+          type: string
+          enum: [ACCEPTED, PROCESSING, COMPLETED, FAILED, CANCELLED, REJECTED]
+        sequence:
+          type: integer
+          minimum: 1
+        currency:
+          $ref: "#/components/schemas/Currency"
+        amount:
+          $ref: "#/components/schemas/Amount"
+        failure_code:
+          type: string
+          description: ISO 20022 reason code, such as AC04 or AM04
+    PayoutStatusChangedEvent:
+      type: object
+      required: [event_id, type, data]
+      properties:
+        event_id:
+          type: string
+        type:
+          type: string
+          enum: [payout.status_changed]
+        data:
+          $ref: "#/components/schemas/Payout"
+
+    CreateStatementRequest:
+      type: object
+      properties:
+        after_statement_id:
+          type: string
+    StatementCurrency:
+      type: object
+      required: [currency, opening_balance, closing_balance, from_sequence, to_sequence]
+      properties:
+        currency:
+          $ref: "#/components/schemas/Currency"
+        opening_balance:
+          $ref: "#/components/schemas/Amount"
+        closing_balance:
+          $ref: "#/components/schemas/Amount"
+        from_sequence:
+          type: integer
+          format: int64
+        to_sequence:
+          type: integer
+          format: int64
+    Statement:
+      type: object
+      required: [statement_id, captured_at, content_hash, currencies, line_count]
+      properties:
+        statement_id:
+          type: string
+        captured_at:
+          type: string
+          format: date-time
+        content_hash:
+          type: string
+        line_count:
+          type: integer
+          format: int64
+        currencies:
+          type: array
+          items:
+            $ref: "#/components/schemas/StatementCurrency"
+    StatementLine:
+      type: object
+      required: [line_id, kind]
+      description: Exactly one of movement, outcome or balance is set, matching kind.
+      properties:
+        line_id:
+          type: string
+        kind:
+          type: string
+          enum: [MOVEMENT, OUTCOME, BALANCE]
+        movement:
+          $ref: "#/components/schemas/Movement"
+        outcome:
+          $ref: "#/components/schemas/Outcome"
+        balance:
+          $ref: "#/components/schemas/StatementCurrency"
+    StatementPage:
+      type: object
+      required: [lines]
+      properties:
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/StatementLine"
+        next_cursor:
+          type: string
+    Movement:
+      type: object
+      required: [sequence, currency, amount, balance_after, kind, reference]
+      properties:
+        sequence:
+          type: integer
+          format: int64
+        currency:
+          $ref: "#/components/schemas/Currency"
+        amount:
+          $ref: "#/components/schemas/SignedAmount"
+        balance_after:
+          $ref: "#/components/schemas/Amount"
+        kind:
+          type: string
+          enum: [FUNDING, TRADE_SELL, TRADE_BUY, PAYOUT_DEBIT, PAYOUT_REFUND]
+        reference:
+          $ref: "#/components/schemas/ClientReference"
+    Outcome:
+      type: object
+      required: [operation, reference, status, finalized_at]
+      properties:
+        operation:
+          type: string
+          enum: [TRADE, PAYOUT]
+        reference:
+          $ref: "#/components/schemas/ClientReference"
+        status:
+          type: string
+          enum: [FILLED, REJECTED, CLOSED, COMPLETED, FAILED, CANCELLED]
+        currency:
+          $ref: "#/components/schemas/Currency"
+        amount:
+          $ref: "#/components/schemas/Amount"
+        failure_code:
+          type: string
+        finalized_at:
+          type: string
+          format: date-time
+
+    Fault:
+      type: string
+      enum:
+        - TRADE_REJECT
+        - TRADE_COMMIT_DROP_REPLY
+        - FX_FILL_DIFFERENCE
+        - DELAY_BEFORE_EXECUTION
+        - PAYOUT_FAIL
+        - PAYOUT_COMMIT_DROP_REPLY
+        - PAYOUT_STUCK_CANCELLABLE
+        - STATUS_API_LAG
+        - WEBHOOK_DUPLICATE
+        - WEBHOOK_REORDER
+        - WEBHOOK_OMIT
+        - FALSE_FAILED_HINT
+        - CONTRADICTORY_FINAL_HINT
+        - RATE_LIMIT
+    ScenarioTarget:
+      type: object
+      required: [kind, value]
+      properties:
+        kind:
+          type: string
+          enum: [quote, payout, account]
+        value:
+          type: string
+          minLength: 1
+    ScenarioArgs:
+      type: object
+      properties:
+        delta:
+          $ref: "#/components/schemas/SignedAmount"
+        code:
+          type: string
+        delay_ms:
+          type: integer
+          minimum: 0
+        duration_ms:
+          type: integer
+          minimum: 0
+    ArmScenarioRequest:
+      type: object
+      required: [fault, target]
+      properties:
+        fault:
+          $ref: "#/components/schemas/Fault"
+        target:
+          $ref: "#/components/schemas/ScenarioTarget"
+        args:
+          $ref: "#/components/schemas/ScenarioArgs"
+        uses:
+          type: integer
+          minimum: 1
+          default: 1
+    ScenarioConsumption:
+      type: object
+      required: [consumed_at, request_id]
+      properties:
+        consumed_at:
+          type: string
+          format: date-time
+        request_id:
+          type: string
+    ScenarioArm:
+      type: object
+      required: [id, fault, target, remaining_uses, consumptions]
+      properties:
+        id:
+          type: string
+        fault:
+          $ref: "#/components/schemas/Fault"
+        target:
+          $ref: "#/components/schemas/ScenarioTarget"
+        args:
+          $ref: "#/components/schemas/ScenarioArgs"
+        remaining_uses:
+          type: integer
+          minimum: 0
+        consumptions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScenarioConsumption"
+    ScenarioArmList:
+      type: object
+      required: [arms]
+      properties:
+        arms:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScenarioArm"
+
+    FundingRequest:
+      type: object
+      required: [account, reference, currency, amount]
+      properties:
+        account:
+          type: string
+          description: The provider account to fund
+        reference:
+          $ref: "#/components/schemas/ClientReference"
+        currency:
+          $ref: "#/components/schemas/Currency"
+        amount:
+          $ref: "#/components/schemas/SignedAmount"
+    Rate:
+      type: object
+      required: [sell_currency, buy_currency, rate_e8]
+      properties:
+        sell_currency:
+          $ref: "#/components/schemas/Currency"
+        buy_currency:
+          $ref: "#/components/schemas/Currency"
+        rate_e8:
+          $ref: "#/components/schemas/RateE8"
+    RouteCount:
+      type: object
+      required: [route, count, throttled]
+      properties:
+        route:
+          type: string
+        count:
+          type: integer
+          format: int64
+        throttled:
+          type: integer
+          format: int64
+    RequestStats:
+      type: object
+      required: [since, routes, peak_per_second]
+      properties:
+        since:
+          type: string
+          format: date-time
+        routes:
+          type: array
+          items:
+            $ref: "#/components/schemas/RouteCount"
+        peak_per_second:
+          type: integer
+    ResetRequest:
+      type: object
+      required: [dataset_id]
+      properties:
+        dataset_id:
+          type: string

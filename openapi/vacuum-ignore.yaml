@@ -1,0 +1,2 @@
+oas3-unused-component:
+  - $.components.schemas.PayoutStatusChangedEvent

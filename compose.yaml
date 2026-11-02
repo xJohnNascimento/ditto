@@ -1,0 +1,59 @@
+name: ditto
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ditto
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "127.0.0.1:5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ditto"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  migrate:
+    build: .
+    command: ["migrate"]
+    environment:
+      DITTO_DATABASE_URL: postgres://postgres@postgres:5432/ditto?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  ditto:
+    build: .
+    command: ["serve"]
+    environment:
+      DITTO_ADDR: ":9002"
+      DITTO_PROFILE: local
+      DITTO_DATASET_ID: local
+      DITTO_DATABASE_URL: postgres://postgres@postgres:5432/ditto?sslmode=disable
+      DITTO_ADMIN_KEY: ${DITTO_ADMIN_KEY:-}
+      DITTO_KEY_CORRIDOR: ${DITTO_KEY_CORRIDOR:-}
+      DITTO_WEBHOOK_SECRET_CORRIDOR: ${DITTO_WEBHOOK_SECRET_CORRIDOR:-}
+      DITTO_WEBHOOK_URL_CORRIDOR: ${DITTO_WEBHOOK_URL_CORRIDOR:-}
+      DITTO_WEBHOOK_RETRY_WINDOW: 2m
+    configs:
+      - source: accounts
+        target: /etc/ditto/accounts.yaml
+      - source: rates
+        target: /etc/ditto/rates.yaml
+    ports:
+      - "127.0.0.1:9002:9002"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "/ditto", "healthcheck"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+configs:
+  accounts:
+    file: deploy/accounts.yaml
+  rates:
+    file: deploy/rates.yaml

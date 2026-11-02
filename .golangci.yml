@@ -1,0 +1,21 @@
+version: "2"
+linters:
+  enable:
+    - bodyclose
+    - errorlint
+    - exhaustive
+    - gosec
+    - misspell
+    - noctx
+    - rowserrcheck
+    - sqlclosecheck
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/xJohnNascimento/ditto
+  exclusions:
+    generated: strict
