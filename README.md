@@ -75,6 +75,10 @@ curl -s localhost:9002/admin/scenarios -H "Authorization: Bearer $DITTO_ADMIN_KE
 
 Repeating a request with the same reference returns the original result; the same reference with a different body is refused. Every field is described in [`openapi/ditto.yaml`](openapi/ditto.yaml).
 
+## Releases
+
+Every pull request carries one label that says what merging it releases: `release: major`, `release: minor`, `release: patch` or `release: none`. Once it merges and CI passes on `main`, the next `vX.Y.Z` is tagged, with GitHub release notes and a signed multi-architecture image on GitHub Container Registry. A change that breaks the OpenAPI contract compared with the last release must be labelled `release: major`, or `release: minor` before 1.0.
+
 ## Documentation
 
 | Document | Contents |

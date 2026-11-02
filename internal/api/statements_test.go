@@ -238,6 +238,9 @@ func TestRequestStatsCountAdmittedAndThrottledRequests(t *testing.T) {
 	opts.RatePerSecond, opts.Burst = 0.1, 3
 	h := newHarnessWith(t, opts)
 	since := time.Now().Add(-time.Second).UTC().Format(time.RFC3339Nano)
+	// The peak counts admitted requests per wall-clock second, so the burst starts at the top of
+	// one: three requests that straddle a second would count as two.
+	time.Sleep(time.Until(time.Now().Truncate(time.Second).Add(time.Second)))
 	for range 5 {
 		h.call(http.MethodGet, "/v1/payouts/by-reference/none", corridorKey, nil)
 	}
