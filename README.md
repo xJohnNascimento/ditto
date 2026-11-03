@@ -4,7 +4,7 @@ A synthetic FX provider and payout rail. It quotes, trades, holds prefunded bala
 
 It exists so that every failure [Corridor](https://github.com/xJohnNascimento/corridor) claims to handle can be triggered, observed and checked against independent evidence. It is never deployed to production.
 
-**Status:** Quotes, trades, payouts, webhooks, statements, fault injection and the Terraform sandbox are built and tested ([`docs/plan.md`](docs/plan.md)). Each [release](https://github.com/xJohnNascimento/ditto/releases) publishes a signed multi-architecture image to `ghcr.io/xjohnnascimento/ditto`.
+**Status:** Quotes, trades, payouts, webhooks, statements and fault injection are built and tested ([`docs/plan.md`](docs/plan.md)), and [`infra/`](infra/README.md) holds the Terraform for a disposable AWS test environment. Each [release](https://github.com/xJohnNascimento/ditto/releases) publishes a signed multi-architecture image to `ghcr.io/xjohnnascimento/ditto`.
 
 ## What it guarantees
 
@@ -77,7 +77,7 @@ Repeating a request with the same reference returns the original result; the sam
 
 ## Releases
 
-Every pull request carries one label that says what merging it releases: `release: major`, `release: minor`, `release: patch` or `release: none`. Once it merges and CI passes on `main`, the next `vX.Y.Z` is tagged, with GitHub release notes and a signed multi-architecture image on GitHub Container Registry. A change that breaks the OpenAPI contract compared with the last release must be labelled `release: major`, or `release: minor` before 1.0.
+Every pull request carries one label that says what merging it releases: `release: major`, `release: minor`, `release: patch` or `release: none`. Once it merges and CI passes on `main`, the next `vX.Y.Z` is tagged, with GitHub release notes and a signed multi-architecture image on GitHub Container Registry. A change that breaks the OpenAPI contract compared with the last release must be labelled `release: major`.
 
 A tag pushed by hand builds, signs and publishes the image after CI passes, and nothing more: it gets no GitHub release.
 
@@ -87,7 +87,7 @@ A tag pushed by hand builds, signs and publishes the image after CI passes, and 
 | --- | --- |
 | [`docs/design.md`](docs/design.md) | Provider contract, API, webhooks, cash, faults, data model, transaction protocol, [code layout](docs/design.md#12-code-layout) |
 | [`docs/plan.md`](docs/plan.md) | Build tasks D0–D5 |
-| [`infra/README.md`](infra/README.md) | Terraform for the AWS sandbox |
+| [`infra/README.md`](infra/README.md) | Terraform for a disposable AWS test environment |
 
 ## License
 
