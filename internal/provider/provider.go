@@ -15,8 +15,9 @@ import (
 )
 
 var (
-	ErrConflict = errors.New("the reference already holds a different request")
-	ErrNotFound = errors.New("not visible now")
+	ErrConflict  = errors.New("the reference already holds a different request")
+	ErrNotFound  = errors.New("not visible now")
+	ErrQuoteUsed = errors.New("the quote already filled a trade")
 )
 
 type ValidationError struct {

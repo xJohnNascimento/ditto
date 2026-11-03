@@ -319,6 +319,8 @@ func writeServiceError(w http.ResponseWriter, r *http.Request, err error) {
 		writeError(w, http.StatusBadRequest, ErrorCodeValidationFailed, validation.Message)
 	case errors.Is(err, provider.ErrConflict):
 		writeError(w, http.StatusConflict, ErrorCodeReferenceConflict, provider.ErrConflict.Error())
+	case errors.Is(err, provider.ErrQuoteUsed):
+		writeError(w, http.StatusConflict, ErrorCodeQuoteAlreadyUsed, provider.ErrQuoteUsed.Error())
 	case errors.Is(err, provider.ErrNotFound):
 		writeError(w, http.StatusNotFound, ErrorCodeNotFound, provider.ErrNotFound.Error())
 	default:

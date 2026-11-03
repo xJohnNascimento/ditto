@@ -112,7 +112,11 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "409":
-          $ref: "#/components/responses/Conflict"
+          description: The reference already holds a different request (`reference_conflict`), or the quote already filled a trade (`quote_already_used`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "413":
           $ref: "#/components/responses/PayloadTooLarge"
         "429":
@@ -588,6 +592,7 @@ components:
             - not_found
             - method_not_allowed
             - reference_conflict
+            - quote_already_used
             - payload_too_large
             - rate_limited
             - internal

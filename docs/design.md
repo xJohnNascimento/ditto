@@ -34,7 +34,7 @@ Base path `/v1`, JSON over HTTPS (HTTP locally). Each provider account authentic
 | Method and path | Request | Response | Notes |
 | --- | --- | --- | --- |
 | `POST /v1/quotes` | `client_reference, sell_currency, buy_currency, sell_amount` | 201 `quote_id, client_reference, sell_currency, buy_currency, sell_amount, rate_e8, buy_amount, expires_at` | A firm quote for a fixed sell amount, valid 60 s. `buy_amount = floor(sell_amount × rate_e8 / 10^8)`. Replays by `client_reference` return the same quote (200); another body is 409 |
-| `POST /v1/trades` | `reference, quote_id, sell_currency, buy_currency, sell_amount` | 201 `trade_id, reference, status, sell_amount, buy_amount, rate_e8, reason?, executed_at` | `status` is `FILLED` or `REJECTED` (`LAST_LOOK`, `QUOTE_EXPIRED`, `INSUFFICIENT_BALANCE`), or `CLOSED` if the reference was closed first. A fill debits the sold currency and credits the delivered amount in one transaction |
+| `POST /v1/trades` | `reference, quote_id, sell_currency, buy_currency, sell_amount` | 201 `trade_id, reference, status, sell_amount, buy_amount, rate_e8, reason?, executed_at` | `status` is `FILLED` or `REJECTED` (`LAST_LOOK`, `QUOTE_EXPIRED`, `INSUFFICIENT_BALANCE`), or `CLOSED` if the reference was closed first. A fill debits the sold currency and credits the delivered amount in one transaction. A quote fills at most once, as a real provider books a firm quote once: a trade with a new reference on a quote that already filled is 409 `quote_already_used` and moves no cash, while a rejected attempt does not consume the quote and the same reference replays its first answer |
 | `GET /v1/trades/by-reference/{reference}` | | 200 the trade, or 404 | 404 means "not visible now", never "will never exist" |
 | `POST /v1/trades/by-reference/{reference}/close` | | 200 `reference, status` | Returns the terminal outcome, or closes an unexecuted or unknown reference for good (`CLOSED`); serialized against create and execution |
 
@@ -138,7 +138,7 @@ A transactional token bucket per provider account: 10 requests per second, burst
 | `operation_reference` | PK `(provider_account_id, kind, reference)`; request hash (set once, nullable until a create arrives, so a close or cancel can fence a reference before any payload exists); state; execution version; timestamps |
 | `provider_account` | PK id; the accounts that own every row below |
 | `rate` | PK `(sell_currency, buy_currency)`; `rate_e8`, updated at; seeded from `rates.yaml` and changed by the admin API |
-| `trade` | One per reference; quote id; pair, sold and delivered amounts, rate, rejection reason, executed at |
+| `trade` | One per reference; quote id; pair, sold and delivered amounts, rate, rejection reason, executed at; unique `(provider_account_id, quote_id)` among trades without a rejection reason, so a quote has one fill |
 | `payout` | One per reference; currency, amount, synthetic beneficiary, remittance info, failure code, due time (`infinity` for a stuck payout), finalized at, `lagged_until` (when `STATUS_API_LAG` ends); the state lives in `operation_reference` |
 | `cash_account` | PK `(provider_account_id, currency)`; `balance check (balance >= 0)`; `last_sequence` |
 | `cash_movement` | Unique `(provider_account_id, currency, sequence)`; signed amount, kind, balance after, effect identity; unique `(effect_id, leg)` |
@@ -165,7 +165,7 @@ For every create, close, cancel and scheduled execution:
 
 Scheduled jobs take the same reference lock and predecessor checks, so a job queued before a cancel can never pay after it. The scheduler runs in every instance and locks each due reference with `SKIP LOCKED`; a payout moves `ACCEPTED → PROCESSING → COMPLETED` one step per `DITTO_PAYOUT_STEP` (2 s by default), and a restart resumes from the stored state.
 
-A create inserts its reference as `PENDING` in the same transaction that executes it, so `PENDING` is never committed; a request refused for a deterministic reason (an unknown quote, terms that differ from the quote) rolls back and leaves the reference free.
+A create inserts its reference as `PENDING` in the same transaction that executes it, so `PENDING` is never committed; a request refused for a deterministic reason (an unknown quote, terms that differ from the quote, a quote that already filled) rolls back and leaves the reference free.
 
 The race test arms `DELAY_BEFORE_EXECUTION`, which makes a create sleep before it claims its reference, runs a cancel during the delay, then lets the create proceed; it must be impossible for the cancel to report a permanent fence and the create to succeed afterwards. The inverse order is tested too. Both run concurrent HTTP requests against real PostgreSQL transactions.
 

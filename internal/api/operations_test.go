@@ -206,6 +206,93 @@ func TestTradeRejectionsAndRefusals(t *testing.T) {
 	}
 }
 
+func TestAFilledQuoteCannotBeTradedAgain(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.fund("corridor", "CAD", "1000000", "f-1")
+	q := h.quote("q-once", "CAD", "USD", "1000")
+
+	var first api.Trade
+	h.call(http.MethodPost, "/v1/trades", corridorKey, tradeRequest("t-first", q)).decode(t, &first)
+	if first.Status != api.TradeStatusFILLED {
+		t.Fatalf("first trade: %+v", first)
+	}
+	cad, usd := h.balance("CAD"), h.balance("USD")
+
+	second := h.call(http.MethodPost, "/v1/trades", corridorKey, tradeRequest("t-second", q))
+	if second.status != http.StatusConflict || second.errorCode(t) != api.ErrorCodeQuoteAlreadyUsed {
+		t.Fatalf("second reference on a filled quote: %d %s", second.status, second.body)
+	}
+	if h.movements("t-second") != 0 || h.balance("CAD") != cad || h.balance("USD") != usd {
+		t.Fatalf("the refused trade moved cash: CAD %d to %d, USD %d to %d", cad, h.balance("CAD"), usd, h.balance("USD"))
+	}
+	if resp := h.call(http.MethodGet, "/v1/trades/by-reference/t-second", corridorKey, nil); resp.status != http.StatusNotFound {
+		t.Fatalf("a refused trade must leave its reference free: %d %s", resp.status, resp.body)
+	}
+
+	var replay api.Trade
+	resp := h.call(http.MethodPost, "/v1/trades", corridorKey, tradeRequest("t-first", q))
+	resp.decode(t, &replay)
+	if resp.status != http.StatusOK || replay.Status != api.TradeStatusFILLED || *replay.TradeId != *first.TradeId {
+		t.Fatalf("replay of the filling reference: %d %s", resp.status, resp.body)
+	}
+}
+
+func TestTwoReferencesRacingForOneQuoteFillOnce(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.fund("corridor", "CAD", "1000000", "f-1")
+	q := h.quote("q-race", "CAD", "USD", "1000")
+
+	const callers = 8
+	var wg sync.WaitGroup
+	responses := make([]response, callers)
+	for i := range callers {
+		wg.Go(func() {
+			responses[i] = h.call(http.MethodPost, "/v1/trades", corridorKey, tradeRequest(fmt.Sprintf("t-race-%d", i), q))
+		})
+	}
+	wg.Wait()
+	filled, refused := 0, 0
+	for i, resp := range responses {
+		switch {
+		case resp.status == http.StatusCreated:
+			filled++
+		case resp.status == http.StatusConflict && resp.errorCode(t) == api.ErrorCodeQuoteAlreadyUsed:
+			refused++
+		default:
+			t.Fatalf("caller %d: %d %s", i, resp.status, resp.body)
+		}
+	}
+	if filled != 1 || refused != callers-1 || h.balance("CAD") != 1000000-1000 {
+		t.Fatalf("%d filled, %d refused, CAD %d; want 1, %d, %d", filled, refused, h.balance("CAD"), callers-1, 1000000-1000)
+	}
+}
+
+func TestARejectedAttemptDoesNotConsumeTheQuote(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.fund("corridor", "CAD", "500", "f-1")
+	q := h.quote("q-poor", "CAD", "USD", "1000")
+
+	var rejected api.Trade
+	h.call(http.MethodPost, "/v1/trades", corridorKey, tradeRequest("t-poor", q)).decode(t, &rejected)
+	if rejected.Status != api.TradeStatusREJECTED || *rejected.Reason != api.TradeReasonINSUFFICIENTBALANCE {
+		t.Fatalf("first attempt: %+v", rejected)
+	}
+
+	h.fund("corridor", "CAD", "1000", "f-2")
+	var filled api.Trade
+	resp := h.call(http.MethodPost, "/v1/trades", corridorKey, tradeRequest("t-funded", q))
+	resp.decode(t, &filled)
+	if resp.status != http.StatusCreated || filled.Status != api.TradeStatusFILLED || h.movements("t-funded") != 2 {
+		t.Fatalf("after funding: %d %s", resp.status, resp.body)
+	}
+	if again := h.call(http.MethodPost, "/v1/trades", corridorKey, tradeRequest("t-late", q)); again.status != http.StatusConflict {
+		t.Fatalf("the fill must consume the quote: %d %s", again.status, again.body)
+	}
+}
+
 func TestAnExpiredQuoteLeavesItsFaultsArmed(t *testing.T) {
 	t.Parallel()
 	h := newHarnessWith(t, provider.Options{QuoteTTL: 300 * time.Millisecond, RatePerSecond: 1000, Burst: 1000})

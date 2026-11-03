@@ -14,6 +14,7 @@ const (
 	ErrorCodeMethodNotAllowed  ErrorCode = "method_not_allowed"
 	ErrorCodeNotFound          ErrorCode = "not_found"
 	ErrorCodePayloadTooLarge   ErrorCode = "payload_too_large"
+	ErrorCodeQuoteAlreadyUsed  ErrorCode = "quote_already_used"
 	ErrorCodeRateLimited       ErrorCode = "rate_limited"
 	ErrorCodeReferenceConflict ErrorCode = "reference_conflict"
 	ErrorCodeUnauthorized      ErrorCode = "unauthorized"
@@ -32,6 +33,8 @@ func (e ErrorCode) Valid() bool {
 	case ErrorCodeNotFound:
 		return true
 	case ErrorCodePayloadTooLarge:
+		return true
+	case ErrorCodeQuoteAlreadyUsed:
 		return true
 	case ErrorCodeRateLimited:
 		return true
