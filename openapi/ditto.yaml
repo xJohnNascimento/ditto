@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Ditto
-  version: 0.4.0
+  version: 1.0.0
   description: |
     A synthetic FX provider and payout rail. Amounts and rates are canonical base-10 integer
     strings: amounts in minor units, rates scaled by 10^8. A reference identifies one request
