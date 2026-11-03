@@ -1,23 +1,32 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended", "helpers:pinGitHubActionDigests"],
+  "extends": ["config:recommended", "helpers:pinGitHubActionDigests", "schedule:weekly"],
   "postUpdateOptions": ["gomodTidy"],
   "rebaseWhen": "behind-base-branch",
   "labels": ["release: patch"],
+  "major": {"dependencyDashboardApproval": true},
   "packageRules": [
+    {
+      "description": "Go module updates arrive together, in one pull request a week",
+      "matchManagers": ["gomod"],
+      "groupName": "Go modules"
+    },
     {
       "description": "Updates that only touch the workflows or the Terraform lint release nothing",
       "matchManagers": ["github-actions", "tflint-plugin"],
+      "groupName": "CI and lint",
       "labels": ["release: none"]
     },
     {
       "description": "Code generators and linters run through go tool never reach the image, so their updates release nothing",
       "matchPackageNames": ["github.com/daveshanley/vacuum", "github.com/oapi-codegen/oapi-codegen/v2"],
+      "groupName": "build tools",
       "labels": ["release: none"]
     },
     {
       "description": "Compose runs the local stack only, so its image updates release nothing",
       "matchManagers": ["docker-compose"],
+      "groupName": "local stack",
       "labels": ["release: none"]
     },
     {
