@@ -4,7 +4,7 @@ A synthetic FX provider and payout rail. It quotes, trades, holds prefunded bala
 
 It exists so that every failure [Corridor](https://github.com/xJohnNascimento/corridor) claims to handle can be triggered, observed and checked against independent evidence. It is never deployed to production.
 
-**Status:** Quotes, trades, payouts, webhooks, statements, fault injection and the Terraform sandbox are built and tested ([`docs/plan.md`](docs/plan.md)). The latest release is v0.4.0, a signed multi-architecture image at `ghcr.io/xjohnnascimento/ditto`.
+**Status:** Quotes, trades, payouts, webhooks, statements, fault injection and the Terraform sandbox are built and tested ([`docs/plan.md`](docs/plan.md)). Each [release](https://github.com/xJohnNascimento/ditto/releases) publishes a signed multi-architecture image to `ghcr.io/xjohnnascimento/ditto`.
 
 ## What it guarantees
 
