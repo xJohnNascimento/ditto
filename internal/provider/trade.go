@@ -89,15 +89,14 @@ func (s *Service) executeTrade(ctx context.Context, tx pgx.Tx, account string, r
 		q       Quote
 		expired bool
 	)
-	// The reference claim may have waited on a lock, so expiry is judged by the clock at this
-	// decision, not by now(), which is fixed when the transaction began. The quote row is locked
-	// so that two references racing for one quote are decided one after the other.
+	// The quote row is locked so that two references racing for one quote are decided one after
+	// the other.
 	err := tx.QueryRow(ctx, `
-		select client_reference, sell_currency, buy_currency, sell_amount, rate_e8, buy_amount, clock_timestamp() > expires_at
+		select client_reference, sell_currency, buy_currency, sell_amount, rate_e8, buy_amount
 		from quote where id = $1 and provider_account_id = $2
 		for update`,
 		req.QuoteID, account,
-	).Scan(&q.ClientReference, &q.SellCurrency, &q.BuyCurrency, &q.SellAmount, &q.RateE8, &q.BuyAmount, &expired)
+	).Scan(&q.ClientReference, &q.SellCurrency, &q.BuyCurrency, &q.SellAmount, &q.RateE8, &q.BuyAmount)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Trade{}, invalid("quote %s is unknown", req.QuoteID)
 	}
@@ -107,11 +106,16 @@ func (s *Service) executeTrade(ctx context.Context, tx pgx.Tx, account string, r
 	if q.SellCurrency != req.SellCurrency || q.BuyCurrency != req.BuyCurrency || q.SellAmount != req.SellAmount {
 		return Trade{}, invalid("the trade does not match quote %s", req.QuoteID)
 	}
+	// Expiry is judged by the clock once the lock is held, in a separate statement: now() is fixed
+	// when the transaction began, and a statement that locks and reads the clock together reads it
+	// before waiting, so a quote could expire while this trade queued behind another for it.
 	var filled bool
-	err = tx.QueryRow(ctx,
-		"select exists (select from trade where provider_account_id = $1 and quote_id = $2 and reason is null)",
+	err = tx.QueryRow(ctx, `
+		select clock_timestamp() > expires_at,
+		       exists (select from trade where provider_account_id = $1 and quote_id = $2 and reason is null)
+		from quote where id = $2 and provider_account_id = $1`,
 		account, req.QuoteID,
-	).Scan(&filled)
+	).Scan(&expired, &filled)
 	if err != nil {
 		return Trade{}, err
 	}

@@ -8,7 +8,7 @@ It knows nothing about the ledger's schema and shares no accounting or checking 
 
 - One `ditto` image with the subcommands `serve`, `migrate`, `scenarios` (prints the fault catalogue) and `healthcheck` (probes `/healthz`, for the container health check), published to GitHub Container Registry on every release tag.
 - Its own PostgreSQL database.
-- An OpenAPI 3.0.3 description in `openapi/ditto.yaml`, for the provider API and the separately authenticated admin API: linted in CI (vacuum, failing on warnings) and the source of the generated Go models. Its `info.version` is set to the release's version by hand before a release is tagged. It is 3.0.3 rather than 3.1 because the Go tooling (oapi-codegen, kin-openapi) supports 3.0 fully. The server loads it at startup and routes every operation it declares.
+- An OpenAPI 3.0.3 description in `openapi/ditto.yaml`, for the provider API and the separately authenticated admin API: linted in CI (vacuum, failing on warnings) and the source of the generated Go models. Its `info.version` is the version of the document, as the OpenAPI specification defines it, not of the service: it follows semantic versioning for changes to the contract, so a behaviour fix or a dependency update releases a new Ditto version and leaves it unchanged. It is 3.0.3 rather than 3.1 because the Go tooling (oapi-codegen, kin-openapi) supports 3.0 fully. The server loads it at startup and routes every operation it declares.
 - Non-production only: `serve` refuses to start unless `DITTO_PROFILE` is `local`, `ci` or `sandbox`, and refuses an account key equal to the admin key.
 - Configuration: `deploy/accounts.yaml` names each provider account and the environment variables holding its key, its webhook endpoint and its webhook secret; `deploy/rates.yaml` holds the rates. `make up` writes random local keys to `.env`.
 
@@ -20,7 +20,7 @@ Corridor's correctness depends on these guarantees, not merely on HTTP being ret
 2. Create, execute, reject, close, cancel and scheduled work for one reference serialize on the same row. A final close or cancel prevents any later request or queued job from creating that effect.
 3. Terminal economic outcomes never change. Observations may lag on purpose, but two different terminal observations for one reference are a contract breach, which Corridor detects.
 4. Statements contain every committed cash movement and terminal outcome, with stable identities and balances that roll forward exactly.
-5. A trade checks its quote's validity at its serialized execution decision. Quote expiry is not a substitute for resolving an already submitted reference.
+5. A trade checks its quote's validity at its serialized execution decision, by the database clock read once it holds the quote's lock, so a trade that queued behind another for the same quote cannot fill it after it expired. Quote expiry is not a substitute for resolving an already submitted reference.
 6. A payout rejected, failed or cancelled after its debit is refunded exactly once. A cancelled unknown reference moves no cash.
 
 A real provider adapter must show which of these it actually has. If its lookup or cancellation is weaker, Corridor keeps the uncertainty and the funds in review; replacing a URL is not an integration.
