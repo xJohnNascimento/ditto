@@ -26,6 +26,7 @@ jobs:
         with:
           version: v2.15.0
       - run: docker run --rm -v "$PWD":/repo -w /repo rhysd/actionlint:1.7.12 -color
+      - run: docker run --rm -v "$PWD":/mnt -w /mnt koalaman/shellcheck:v0.11.0 .github/scripts/*.sh
 
   test:
     runs-on: ubuntu-latest

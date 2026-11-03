@@ -1,7 +1,8 @@
 name: release
 
 # version.yml calls this with the version of a merged pull request, once CI has passed on that
-# merge. A tag pushed by hand still releases, after running CI here.
+# merge. A tag pushed by hand runs CI here and then builds and signs the image for it, with no
+# GitHub Release.
 on:
   push:
     tags: ["v*"]

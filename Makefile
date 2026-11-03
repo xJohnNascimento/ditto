@@ -1,5 +1,6 @@
 GOLANGCI_LINT_VERSION := v2.15.0
 ACTIONLINT_VERSION := 1.7.12
+SHELLCHECK_VERSION := v0.11.0
 TERRAFORM_IMAGE := hashicorp/terraform:1.16.6
 TFLINT_IMAGE := ghcr.io/terraform-linters/tflint:v0.64.0
 GOMODCACHE := $(shell go env GOMODCACHE)
@@ -18,6 +19,7 @@ test:
 lint:
 	docker run --rm -v "$(CURDIR)":/src -v "$(GOMODCACHE)":/go/pkg/mod -w /src golangci/golangci-lint:$(GOLANGCI_LINT_VERSION) golangci-lint run
 	docker run --rm -v "$(CURDIR)":/repo -w /repo rhysd/actionlint:$(ACTIONLINT_VERSION) -color
+	docker run --rm -v "$(CURDIR)":/mnt -w /mnt koalaman/shellcheck:$(SHELLCHECK_VERSION) .github/scripts/*.sh
 
 openapi:
 	go tool vacuum lint --ruleset openapi/vacuum-ruleset.yaml --ignore-file openapi/vacuum-ignore.yaml --fail-severity warn --no-style openapi/ditto.yaml
