@@ -354,6 +354,47 @@ func TestAQuoteThatExpiresWhileTheTradeWaitsForALockIsNotFilled(t *testing.T) {
 	}
 }
 
+func TestAQuoteThatExpiresWhileATradeQueuesBehindARejectedOneIsNotFilled(t *testing.T) {
+	t.Parallel()
+	h := newHarnessWith(t, provider.Options{QuoteTTL: 2 * time.Second, RatePerSecond: 1000, Burst: 1000})
+	h.fund("corridor", "CAD", "1000", "f-1")
+	q := h.quote("q-queued", "CAD", "USD", "100")
+	ctx := context.Background()
+	first, err := h.db.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = first.Rollback(ctx) }()
+	if _, err := first.Exec(ctx, "select id from quote where id = $1 for update", q.QuoteId); err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan response, 1)
+	go func() { done <- h.call(http.MethodPost, "/v1/trades", corridorKey, tradeRequest("t-queued", q)) }()
+	eventually(t, "the trade to wait for the quote lock", func() bool {
+		var waiting bool
+		err := h.db.QueryRow(ctx, `
+			select exists(select from pg_stat_activity
+			where datname = current_database() and wait_event_type = 'Lock' and query like '%from quote where id%for update%')`,
+		).Scan(&waiting)
+		return err == nil && waiting
+	})
+	var early bool
+	if err := h.db.QueryRow(ctx, "select now() < expires_at from quote where id = $1", q.QuoteId).Scan(&early); err != nil || !early {
+		t.Fatalf("the trade must queue before the quote expires: early %v, err %v", early, err)
+	}
+	h.awaitExpiry(q)
+	if err := first.Rollback(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	var trade api.Trade
+	(<-done).decode(t, &trade)
+	if trade.Status != api.TradeStatusREJECTED || *trade.Reason != api.TradeReasonQUOTEEXPIRED {
+		t.Fatalf("a quote that expired while the trade queued for it: %+v", trade)
+	}
+}
+
 func TestARejectedTradeKeepsTheQuotedAmount(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)

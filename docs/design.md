@@ -20,7 +20,7 @@ Corridor's correctness depends on these guarantees, not merely on HTTP being ret
 2. Create, execute, reject, close, cancel and scheduled work for one reference serialize on the same row. A final close or cancel prevents any later request or queued job from creating that effect.
 3. Terminal economic outcomes never change. Observations may lag on purpose, but two different terminal observations for one reference are a contract breach, which Corridor detects.
 4. Statements contain every committed cash movement and terminal outcome, with stable identities and balances that roll forward exactly.
-5. A trade checks its quote's validity at its serialized execution decision. Quote expiry is not a substitute for resolving an already submitted reference.
+5. A trade checks its quote's validity at its serialized execution decision, by the database clock read once it holds the quote's lock, so a trade that queued behind another for the same quote cannot fill it after it expired. Quote expiry is not a substitute for resolving an already submitted reference.
 6. A payout rejected, failed or cancelled after its debit is refunded exactly once. A cancelled unknown reference moves no cash.
 
 A real provider adapter must show which of these it actually has. If its lookup or cancellation is weaker, Corridor keeps the uncertainty and the funds in review; replacing a URL is not an integration.
