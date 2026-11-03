@@ -2,7 +2,7 @@
 
 Ditto's build tasks, in order. Each task is done when its code and tests are merged with CI green, its "done when" is shown, and the design is updated in the same pull request. Which Ditto releases Corridor waits for is in Corridor's [cross-repository plan](https://github.com/xJohnNascimento/corridor/blob/main/docs/plan.md).
 
-**Status:** D0–D5 are done; their release tags are cut when the repository is published.
+**Status:** D0–D5 are done and released; the latest release is v0.4.0, with its image on `ghcr.io/xjohnnascimento/ditto`. Releases are cut from the labels on merged pull requests, so the versions named in the rows below were the plan's targets, not the numbers published.
 
 | Id | Task | Done when | Depends on |
 | --- | --- | --- | --- |

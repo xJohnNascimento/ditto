@@ -4,7 +4,7 @@ A synthetic FX provider and payout rail. It quotes, trades, holds prefunded bala
 
 It exists so that every failure [Corridor](https://github.com/xJohnNascimento/corridor) claims to handle can be triggered, observed and checked against independent evidence. It is never deployed to production.
 
-**Status:** D0–D5 are built and tested ([`docs/plan.md`](docs/plan.md)).
+**Status:** Quotes, trades, payouts, webhooks, statements, fault injection and the Terraform sandbox are built and tested ([`docs/plan.md`](docs/plan.md)). The latest release is v0.4.0, a signed multi-architecture image at `ghcr.io/xjohnnascimento/ditto`.
 
 ## What it guarantees
 
@@ -29,7 +29,7 @@ make up
 | --- | --- |
 | `docker compose exec ditto /ditto scenarios` | Prints the fault catalogue |
 | `make test` | Drives the whole service over HTTP against real PostgreSQL |
-| `make lint` | golangci-lint and actionlint, as CI runs them |
+| `make lint` | golangci-lint, actionlint and shellcheck, as CI runs them |
 | `make openapi-check`, `make tf-validate` | Contract lint and generated-code drift, and Terraform checks, as CI runs them |
 | `go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...` | Known vulnerabilities in dependencies, as CI runs it |
 
@@ -79,6 +79,8 @@ Repeating a request with the same reference returns the original result; the sam
 
 Every pull request carries one label that says what merging it releases: `release: major`, `release: minor`, `release: patch` or `release: none`. Once it merges and CI passes on `main`, the next `vX.Y.Z` is tagged, with GitHub release notes and a signed multi-architecture image on GitHub Container Registry. A change that breaks the OpenAPI contract compared with the last release must be labelled `release: major`, or `release: minor` before 1.0.
 
+A tag pushed by hand builds, signs and publishes the image after CI passes, and nothing more: it gets no GitHub release.
+
 ## Documentation
 
 | Document | Contents |
@@ -86,3 +88,7 @@ Every pull request carries one label that says what merging it releases: `releas
 | [`docs/design.md`](docs/design.md) | Provider contract, API, webhooks, cash, faults, data model, transaction protocol, [code layout](docs/design.md#12-code-layout) |
 | [`docs/plan.md`](docs/plan.md) | Build tasks D0–D5 |
 | [`infra/README.md`](infra/README.md) | Terraform for the AWS sandbox |
+
+## License
+
+[MIT](LICENSE)
