@@ -1,6 +1,6 @@
 # infra
 
-Terraform that deploys Ditto to the shared AWS sandbox. It refuses any environment other than a sandbox: Ditto never runs in production.
+Terraform that deploys Ditto to the shared AWS sandbox, a disposable test environment. It refuses any environment other than a sandbox: Ditto never runs in production.
 
 The sandbox foundation (network, ECS cluster, service discovery, GitHub OIDC provider) belongs to Corridor's `infra/` and is published in SSM Parameter Store under `/sandbox/foundation/`. Apply it first.
 
